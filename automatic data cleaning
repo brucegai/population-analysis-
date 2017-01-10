@@ -1,0 +1,120 @@
+library(stringr)
+library(dplyr)
+library(RODBC)
+Myconnect<-odbcConnect(dsn = "172.16.1.225:1521",uid="tester_ns",pwd = "tester", believeNRows = FALSE)
+Mydata<-sqlQuery(Myconnect,"select REGISTERADDRESS,CARDNO2 from DWI_SZRESIDENT_ATM")
+
+data_nanshan<-Mydata
+data_nanshan<-cbind(data_nanshan,str_sub(data_nanshan$CARDNO2,start = 1,end=6))
+
+data_nanshan<-cbind(data_nanshan,str_sub(data_nanshan$REGISTERADDRESS,start=1,end=4))
+
+#Rename coloums, convience for coding
+colnames(data_nanshan)=c("REGISTERADDRESS","CARDNO2","FOUR_CHAR_CARDNO2","data_nanshan")
+
+#
+data_nanshan$data_nanshan<-gsub("深圳市","广东省",data_nanshan$data_nanshan)
+data_nanshan$data_nanshan<-gsub("深圳","广东省",data_nanshan$data_nanshan)
+data_nanshan$data_nanshan<-gsub("深","广东省",data_nanshan$data_nanshan)
+data_nanshan$data_nanshan<-gsub("南山","广东省",data_nanshan$data_nanshan)
+data_nanshan$data_nanshan<-gsub("罗湖","广东省",data_nanshan$data_nanshan)
+data_nanshan$data_nanshan<-gsub("宝安","广东省",data_nanshan$data_nanshan)
+data_nanshan$data_nanshan<-gsub("福田","广东省",data_nanshan$data_nanshan)
+data_nanshan$data_nanshan<-gsub("盐田","广东省",data_nanshan$data_nanshan)
+data_nanshan$data_nanshan<-gsub("龙岗","广东省",data_nanshan$data_nanshan)
+data_nanshan$data_nanshan<-gsub("龙华","广东省",data_nanshan$data_nanshan)
+data_nanshan$data_nanshan<-gsub("粤","广东省",data_nanshan$data_nanshan)
+data_nanshan$data_nanshan<-gsub("粤海","广东省",data_nanshan$data_nanshan)
+data_nanshan$data_nanshan<-gsub("桃源","广东省",data_nanshan$data_nanshan)
+data_nanshan$data_nanshan<-gsub("本址","广东省",data_nanshan$data_nanshan)
+data_nanshan$data_nanshan<-gsub("本户","广东省",data_nanshan$data_nanshan)
+data_nanshan$data_nanshan<-gsub("本地","广东省",data_nanshan$data_nanshan)
+data_nanshan$data_nanshan<-gsub("沙河","广东省",data_nanshan$data_nanshan)
+data_nanshan$data_nanshan<-gsub("高新","广东省",data_nanshan$data_nanshan)
+data_nanshan$data_nanshan<-gsub("招商","广东省",data_nanshan$data_nanshan)
+data_nanshan$data_nanshan<-gsub("厂东","广东省",data_nanshan$data_nanshan)
+data_nanshan$data_nanshan<-gsub("蛇口","广东省",data_nanshan$data_nanshan)
+data_nanshan$data_nanshan<-gsub("南头","广东省",data_nanshan$data_nanshan)
+data_nanshan$data_nanshan<-gsub("西丽","广东省",data_nanshan$data_nanshan)
+data_nanshan$data_nanshan<-gsub("廣","广东省",data_nanshan$data_nanshan)
+
+
+# 特殊字段，或者其他错别字段
+data_nanshan$data_nanshan<-gsub("胡北","湖北省",data_nanshan$data_nanshan)
+data_nanshan$data_nanshan<-gsub("胡南","湖南省",data_nanshan$data_nanshan)
+data_nanshan$data_nanshan<-gsub("安微","安徽省",data_nanshan$data_nanshan)
+
+# 遍历省市的表格，自动将地级市替换成省份
+# 省份是temp_1,城市是temp_2，pass_value是传递省份的值，pass_value_2是传递城市的值
+temp_1<-as.character(city_province_info$Province)
+temp_2<-as.character(city_province_info$city)
+
+pass_value<-c()
+pass_value_2<-c()
+
+temp_province<-c()
+temp_city<-c()
+
+
+for(i in 1:nrow(city_province_info)){
+  pass_value<-as.character(city_province_info$Province[i])
+  temp_1[i]<-pass_value
+  
+  pass_value_2<-as.character(city_province_info$city[i])
+  temp_2[i]<-pass_value_2
+  
+  data_nanshan$data_nanshan<-gsub(temp_2[i],temp_1[i],data_nanshan$data_nanshan) 
+}
+
+
+# 根据Three_char 给每个省份打标签广东省-1，湖南省-2，湖北省-3...... 见表格： 省份人数统计（并且生成新的变量字段）Province_Rep
+# 1. 生成新的变量：Province_Rep.1,默认值为0
+Province_Rep.1<-c(0)
+data_nanshan<-data.frame(data_nanshan,Province_Rep.1)
+
+# 读取省份的表格，每个省份没有重复值，并且对应着自己的ID 
+
+temp_3<-as.character(city_province_info_2$Province)
+temp_4<-city_province_info_2$id
+this_pass_value<-c()
+this_pass_value_2<-c()
+temp_province<-c()
+temp_id<-c()
+
+for(i in 1:length(temp_3)){
+  this_pass_value<-as.character(temp_3[i])
+  temp_province[i]<-this_pass_value
+  this_pass_value_2<-city_province_info_2$id[i]
+  temp_id[i]<-this_pass_value_2
+  
+  data_nanshan$Province_Rep.1[str_detect(data_nanshan$data_nanshan,temp_province[i])]<-temp_id[i]
+}
+
+
+#未分类完全字段仍然有40761个地址
+# 单独生成子表格，x仅为统计40761个未归类地址
+data_nanshan_2<-subset(data_nanshan,Province_Rep.1==0)
+x<-table(data_nanshan_2$data_nanshan)
+
+# pick the Var1 which its Freq is higher than 150
+x<-as.data.frame(x)
+x<-x[which(x$Freq>100),]
+
+
+# 将FREQ大于150的生成向量，自动读取然后自动将该类地址标签为1
+#循环将在X$Var1中的每个元素提取出来
+remain_list<-c()
+temp_5<-c()
+for(i in 1:nrow(x)){
+  temp_5<-as.character(x$Var1[i])
+  remain_list[i]<-temp_5
+}
+
+# 将所有出现次数大于150的并且未在之前进行归类的默认为广东省
+for (i in 1:length(remain_list)) {
+  data_nanshan$Province_Rep.1[str_detect(data_nanshan$data_nanshan,remain_list[i])]<-1
+}
+
+names(city_province_info_2)=c("Province","Province_Rep.1")
+data_nanshan_3<-left_join(data_nanshan,city_province_info_2,by="Province_Rep.1")
+
